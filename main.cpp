@@ -6,167 +6,170 @@
 
 
 using namespace std;
-
+IplImage *HalfHand(IplImage *input);
+void FindContour(IplImage *src, IplImage *display);
 int main()
 {
-    IplImage *BackGround, *BackGround_gray;
-    IplImage *frame, *frame_gray ;
-    IplImage *fore;
-    IplImage *contoured;
-    IplImage *fore_edge;
-    IplImage *temp;
+    IplImage *src = cvLoadImage("E:/Study_Resource/OPENCV_Project/photo/001.bmp");
+    IplImage *srcHSV = cvCreateImage(cvGetSize(src),8,3);
+    cvCvtColor(src,srcHSV,CV_BGR2HSV);
 
-    CvRect roi = cvRect(150,0,400,480);
-    cvNamedWindow("fore");
-    cvNamedWindow("contoured");
+    IplImage *srcH = cvCreateImage(cvGetSize(src),8,1);cvZero(srcH);
+    IplImage *srcS = cvCreateImage(cvGetSize(src),8,1);cvZero(srcS);
+    IplImage *srcV = cvCreateImage(cvGetSize(src),8,1);cvZero(srcV);
+    cvCvtPixToPlane(srcHSV,srcH,srcS,srcV,0);
 
-    CvMemStorage *storage = cvCreateMemStorage(0);
-    CvSeq *contour = NULL ,*hull = NULL;
 
-    BackGround = cvLoadImage("E:/Study_Resource/OPENCV_Project/photo/001.bmp");
-         frame = cvLoadImage("E:/Study_Resource/OPENCV_Project/photo/002.bmp");
+    IplImage *frame = cvLoadImage("E:/Study_Resource/OPENCV_Project/photo/009.bmp");
+    IplImage *frameHSV = cvCreateImage(cvGetSize(frame),8,3);
+    cvCvtColor(frame,frameHSV,CV_BGR2HSV);
 
-    BackGround_gray   =   cvCreateImage(cvGetSize(frame),IPL_DEPTH_8U,1);
-         frame_gray   =   cvCreateImage(cvGetSize(frame),IPL_DEPTH_8U,1);
-         fore         =   cvCreateImage(cvGetSize(frame),IPL_DEPTH_8U,1);
-         temp         =   cvCreateImage(cvGetSize(frame),IPL_DEPTH_8U,1);cvZero(temp);
-         fore_edge    =   cvCreateImage(cvGetSize(frame),IPL_DEPTH_8U,1);
-         contoured    =   cvCreateImage(cvGetSize(frame),IPL_DEPTH_8U,3);
+    IplImage *frameH = cvCreateImage(cvGetSize(frame),8,1);cvZero(frameH);
+    IplImage *frameS = cvCreateImage(cvGetSize(frame),8,1);cvZero(frameS);
+    IplImage *frameV = cvCreateImage(cvGetSize(frame),8,1);cvZero(frameV);
+    cvCvtPixToPlane(frameHSV,frameH,frameS,frameV,0);
 
-    cvZero(BackGround_gray);
-    cvZero(frame_gray);
-    cvZero(fore);
-    cvZero(fore_edge);
-    cvZero(contoured);
+    cvAbsDiff(srcH,frameH,frameH);
+    cvAbsDiff(srcS,frameS,frameS);
+    cvAbsDiff(srcV,frameV,frameV);
 
-/**********************************************
- * 将读取的图片灰度化，然后帧差去前景，开运算，阈值化二值化
- *********************************************/
-    cvCvtColor(BackGround,BackGround_gray,CV_BGR2GRAY);
-    cvCvtColor(frame,frame_gray,CV_BGR2GRAY);
+    cvThreshold(frameV,frameV,20,255,CV_THRESH_BINARY);  //对V通道阈值化
+    IplConvKernel* kernel = cvCreateStructuringElementEx(3,3,1,1,CV_SHAPE_RECT); //膨胀/腐蚀的kernel
+    IplImage *temp = cvCreateImage(cvGetSize(frameS),8,1);cvZero(temp);
 
-    cvAbsDiff(BackGround_gray,frame_gray,fore);
 
-    IplConvKernel* kernel =cvCreateStructuringElementEx(3,3,1,1,CV_SHAPE_RECT);
+    cvDilate(frameV,temp,kernel,2);
+    cvErode(temp,temp,kernel,7);
+    cvDilate(temp,temp,kernel,3);
 
-    cvMorphologyEx(fore,fore,temp,kernel,CV_MOP_OPEN,2);
-    cvDilate(fore,fore);
+    frameHSV = HalfHand(temp);
 
-    cvThreshold(fore,fore_edge,35,255,CV_THRESH_BINARY);
+    cvNamedWindow("frameV");
+    cvNamedWindow("frameHSV");
+    cvNamedWindow("frameS");
 
-/**********************************************
- * 轮廓扫描，找到凸包，还有凸缺陷
- * ******************************************
-    CvContourScanner scanner = cvStartFindContours(fore,storage);
-    while((contour = cvFindNextContour(scanner)) != NULL)
-    {
-        cvCvtColor(fore,contoured,CV_GRAY2BGR);
+    cvShowImage("frameV",frameV);
+    cvShowImage("frameHSV",frameHSV);
+    cvShowImage("frameS",temp);
 
-        cvDrawContours(contoured,contour,CV_RGB(255,0,0),CV_RGB(0,255,0),0);
+    cvNamedWindow("display");
+    FindContour(frameHSV,frame);
 
-        cout<<cvCheckContourConvexity(contour)<<endl;
-
-        hull = cvConvexHull2(contour,0,CV_CLOCKWISE,0);
-
-        CvPoint pt0 = **(CvPoint**)cvGetSeqElem(hull,hull->total-1);
-        for(int i = 0;i<hull->total;++i)
-        {
-            CvPoint pt1 = **(CvPoint**)cvGetSeqElem(hull,i);
-            cvLine(contoured,pt0,pt1,CV_RGB(0,0,255));
-            pt0 = pt1;
-        }
-
-        CvSeq *defect = cvConvexityDefects(contour,hull);
-
-        for(int i = 0; i<defect->total; ++i)
-        {
-            CvConvexityDefect df = *(CvConvexityDefect*)cvGetSeqElem(defect,i);
-            cvCircle(contoured,*df.start,2,CV_RGB(255,100,0),-1);
-            cvCircle(contoured,*df.end,2,CV_RGB(255,255,0),-1);
-            cvCircle(contoured,*df.depth_point,2,CV_RGB(255,255,0),-1);
-
-            cout <<"depth of df="<<&df.depth<<endl;
-
-        }
-
-        cvShowImage("contoured",fore);
-
-    }*/
-
-/**********************************************************
- * 网上的不好使，在学习opencv的书上找到例子，然后自己试着写
- * ********************************************************/
-    cvSetImageROI(fore_edge,roi);
-    cvShowImage("fore",fore_edge);
-    CvContourScanner scanner = cvStartFindContours(fore_edge,storage);
-
-    int Nc = cvFindContours(fore_edge,storage,&contour,sizeof(CvContour),CV_RETR_LIST);
-    int n = 0;
-
-    printf("Total Contours Detected: %d\n",Nc);
-
-    for(CvSeq* c = contour; c!=NULL; c=c->h_next)
-    {
-        if(c->total>40){                    //剔除噪声轮廓
-        cvDrawContours(frame,c,CV_RGB(255,0,0),CV_RGB(0,0,255),0,2);
-/*        printf("Contour #%d\n",n);
-//        cvShowImage("contored",frame);
-
-//        printf(" %d elements:\n", c->total);
-//        for(int i =0; i<c->total; ++i)
-//        {
-//            CvPoint* p = CV_GET_SEQ_ELEM(CvPoint,c,i);
-//            printf(" (%d,%d) \n", p->x,p->y);
-//
-//        }
-//        cvWaitKey(0);
-        n++;  */
-        printf("c.total = %d\n", c->total);
-
-        cout<<cvCheckContourConvexity(contour)<<endl;
-
-        hull = cvConvexHull2(contour,0,CV_CLOCKWISE,0);              //根据已知的轮廓计算凸包
-
-        CvPoint pt0 = **(CvPoint**)cvGetSeqElem(hull,hull->total-1);
-
-            for(int i=0; i<hull->total; ++i)
-            {
-                CvPoint pt1 = **(CvPoint**)cvGetSeqElem(hull,i);
-                cvLine(frame,pt0,pt1,CV_RGB(255,0,255),3);  //pink
-                pt0 = pt1;
-                printf("pt0 = < %d , %d>\n",pt0.x,pt0.y);
-            }
-
-        CvSeq *defect =   cvConvexityDefects(contour,hull);
-        printf("defect`s total = %d\n",defect->total);
-
-            for(int i = 0; i<defect->total; ++i)
-            {
-                CvConvexityDefect df = *(CvConvexityDefect*)cvGetSeqElem((defect),i);
-//                cvCircle(frame,*df.start,20,CV_RGB(255,255,0),2);
-//                cvCircle(frame,*df.end,20,CV_RGB(255,255,0),2);
-                if((int)df.depth > 20){
-                cvCircle(frame,*df.depth_point,5,CV_RGB(0,255,255),2);
-                printf("depth = %f \n",df.depth);
-                printf("00000000\n");
-                }
-            }
-
-            cvShowImage("contored",frame);
-            cv::waitKey(0);
-            n++;
-
-        }
-    }
-
-    printf("Finished all contours.\n");
-
-    cvEndFindContours(&scanner);
-
-    cv::waitKey(0);
+    cvWaitKey(0);
     cvDestroyAllWindows();
-
 
     return 0;
 }
+/*********************************************************
+ * 函数名称: HalfHand
+ * 函数功能：在二值化以后的图像中统计前60%非零像素点
+ * 补充说明：因为手是从图像右侧进入，且占据图像大约70%的部分，
+ *         所以将图像左侧30%的非零像素点视为噪点，忽略掉。
+ * 函数输入：一幅灰度图像
+ * 函数输出：一幅灰度图像（0，128，255三种灰度）
+ * 涉及功能：图像遍历、像素级处理
+ ********************************************************/
+IplImage *HalfHand(IplImage *input){
+
+    int heigh = input->height;
+    int width = input->width;
+    int SumPix = heigh*width;               //计算总像素数
+    int step = input->widthStep;
+    uchar *data = (uchar*)input->imageData;
+
+    int NonZero = cvCountNonZero(input);    //计算非零像素数
+    float NonZeroPrecent ;
+    int num =cvCountNonZero(input)/10*6;     //对前60%非零像素不处理，保留（注：此值应于alpha的取值有关）
+    int sum = 0;
+    int stop = 0;
+
+    NonZeroPrecent = (float)NonZero/SumPix*100;//计算 非零像素在总像素中所占的比例 记为系数——alpha
+
+    printf("SumPix = %d\nNonZero = %d\nNonZeroPrecent = %f\n",SumPix,NonZero,NonZeroPrecent);
+
+    for(int j=0;j<width;j++){
+        for(int i =0; i<heigh; i++){
+            if((data[i*step+j]!=0) && (j<=width/10*3))  //将图像左侧30%部分视为噪点忽略掉
+            {
+                data[i*step+j] = 0;
+            }
+            else {
+                if((data[i*step+j]!=0) && (stop == 0))
+                {
+                    sum++;
+                    if(num == sum) stop=1;
+                }
+                else   if((data[i*step+j]!=0) && (stop == 1))
+                {
+                    data[i*step+j] = 0;                 //对后40%的非零像素做处理
+                }
+            }
+
+        }
+    }
+    return input;
+}
+/****************************************************
+ * 函数名称：FindContour
+ * 函数功能：找到二值图像中的轮廓
+ * 函数输入：一幅二值图像 (IplImage *src)
+ * 函数输出：一幅带有二值图像轮廓的BGR图像(IplImage *display)
+ *******************************************************/
+void FindContour(IplImage *src, IplImage *display){
+
+    CvMemStorage *storage = cvCreateMemStorage(0);
+    CvSeq *contour = NULL, *hull = NULL;
+
+    CvContourScanner scanner = cvStartFindContours(src,storage);
+
+    int Nc = cvFindContours(src,storage,&contour,sizeof(CvContour));
+    int n = 0;
+
+    printf("Total contours Detected :%d \n",Nc);
+
+    for(CvSeq*c = contour;c !=NULL; c=c->h_next)
+    {
+        if(c->total>40){
+            cvDrawContours(display,c,CV_RGB(255,0,0),CV_RGB(0,0,255),0,2);
+            printf("c.total = %d\n",c->total);
+            cout<<cvCheckContourConvexity(contour)<<endl;
+
+            hull = cvConvexHull2(contour);
+
+            CvPoint pt0 = **(CvPoint**)cvGetSeqElem(hull,hull->total-1);
+
+            for(int i=0;i<hull->total; ++i){
+                CvPoint pt1 = **(CvPoint**)cvGetSeqElem(hull,i);
+                cvLine(display,pt0,pt1,CV_RGB(255,0,255),3);
+                pt0 = pt1;
+                printf("pt0 = <%d, %d>\n",pt0.x,pt0.y);
+            }
+
+            CvSeq *defect = cvConvexityDefects(contour,hull);
+            printf("defect`s total = %d\n",defect->total);
+
+            for(int i=0; i<defect->total; ++i){
+                CvConvexityDefect df = *(CvConvexityDefect*)cvGetSeqElem((defect),i);
+                if((int)df.depth>20){
+                    cvCircle(display,*df.depth_point,5,CV_RGB(0,255,255),2);
+                    printf("depth = %f \n",df.depth);
+                }
+            }
+            cvShowImage("display",display);
+            cvWaitKey(0);
+            n++;
+        }
+    }
+
+    cvEndFindContours(&scanner);
+    printf("Find finished \n");
+}
+
+
+
+
+
+
+
+
 
